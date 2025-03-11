@@ -1,0 +1,19 @@
+{
+  "name": "cannabis-app-scraper",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "app-store-scraper": "^0.18.0",
+    "dotenv": "^16.4.7",
+    "google-play-scraper": "^10.0.1",
+    "mongoose": "^8.12.0"
+  }
+}
