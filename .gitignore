@@ -7,6 +7,11 @@ package-lock.json
 pnpm-debug.log*
 bun.lockb
 
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
 # Environment variables (DO NOT COMMIT sensitive credentials!)
 .env
 .env.local
