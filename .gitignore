@@ -30,11 +30,6 @@ out.log*
 error.log*
 .log
 
-# MongoDB database files (if using local MongoDB)
-data/
-dump/
-*.lock
-
 # Ignore process files
 pids/
 *.pid

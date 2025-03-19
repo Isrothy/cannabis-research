@@ -154,12 +154,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load YAML config if provided.
     config = {}
     if args.config:
         config = load_config(args.config)
 
-    # Command-line arguments override YAML config.
     collection_name = args.collection or config.get("collection")
     classifier_names = args.classifiers or config.get("classifiers")
     mode = args.mode or config.get("mode", "cluster")
@@ -214,16 +212,13 @@ def main():
         for _, row in clustered_df.iterrows():
             app_id = row["appId"]
             cluster_label = int(row["cluster"])
-            cluster_size = int(row["cluster_size"])
 
             # Update the document in MongoDB
             result = collection.update_one(
                 {"appId": app_id},
                 {
                     "$set": {
-                        "cluster.label": cluster_label,
-                        "cluster.size": cluster_size,
-                        "cluster.k_value": k_value,
+                        "cluster_label": cluster_label,
                     }
                 },
             )
@@ -232,18 +227,6 @@ def main():
                 update_count += 1
 
         print(f"Updated {update_count} records with cluster information (k={k_value}).")
-
-        # Save cluster information to CSV if output filename is provided
-        if output_filename:
-            output_columns = [
-                "title",
-                "appId",
-                "cluster",
-                "cluster_size",
-            ] + original_field_list
-            result = clustered_df[output_columns].reset_index(drop=True)
-            result.to_csv(output_filename, index=False)
-            print(f"Cluster information saved to: {output_filename}")
 
 
 if __name__ == "__main__":

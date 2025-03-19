@@ -36,7 +36,8 @@ def classify_and_update_records(collection_name, model_name, task):
     db = client.get_default_database()
     collection = db[collection_name]
 
-    field_name = f"classifier-score.{model_name}"
+    normalized_model_name = model_name.replace("/", "_")
+    field_name = f"classifier-score.{normalized_model_name}"
     query = {
         "description": {"$exists": True},
         field_name: {"$exists": False},

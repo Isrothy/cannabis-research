@@ -1,0 +1,9 @@
+collection: appleApps
+k: 4
+samples: 15
+classifiers:
+  - "facebook/bart-large-mnli"
+  - "roberta-large-mnli"
+  - "distilbert-base-uncased-finetuned-sst-2-english"
+  - "valhalla/distilbart-mnli-12-9"
+output: data/appleAppsSamples.csv

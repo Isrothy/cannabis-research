@@ -1,0 +1,13 @@
+collection: "googleApps"
+mode: "cluster"
+k: 4
+classifiers:
+  - "facebook/bart-large-mnli"
+  - "roberta-large-mnli"
+  - "distilbert-base-uncased-finetuned-sst-2-english"
+  - "valhalla/distilbart-mnli-12-9"
+k_min: 2
+k_max: 20
+n_runs: 10
+# output: "clustering_loss-googleApps.png"
+# output: "clustering_loss-appleApps.csv"
