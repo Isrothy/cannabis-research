@@ -55,7 +55,7 @@ def parse_args():
         "--min_samples_split", type=int, help="Minimum samples to split"
     )
     parser.add_argument(
-        "--test_size", type=float, help="Proportion of data to use for testing"
+        "--min_samples_leaf", type=int, help="Minimum samples in a leaf"
     )
     parser.add_argument(
         "--random_state", type=int, help="Random seed for reproducibility"
@@ -70,6 +70,11 @@ def parse_args():
         type=bool,
         help="Use sample weighting based on cluster weights",
     )
+    parser.add_argument(
+        "--n_splits",
+        type=int,
+        help="Number of folds for StratifiedKFold cross-validation",
+    )
 
     args = parser.parse_args()
 
@@ -81,11 +86,12 @@ def parse_args():
         "plot_dir": "img",
         "n_estimators": 100,
         "max_depth": 5,
+        "min_samples_leaf": 8,
         "min_samples_split": 10,
-        "test_size": 0.2,
         "random_state": 42,
         "use_class_weight": True,
         "use_sample_weight": True,
+        "n_splits": 5,
     }
 
     if args.config:
@@ -268,55 +274,37 @@ def train_model(
     n_estimators=100,
     max_depth=None,
     min_samples_split=None,
-    test_size=0.2,
+    min_samples_leaf=None,
     random_state=42,
     use_class_weight=True,
     use_sample_weight=True,
+    n_splits=5,
 ):
     """
-    Train a random forest classifier with class weighting and sample weighting.
+    Train a random forest classifier with class weighting and sample weighting
+    using StratifiedKFold cross-validation.
 
     Args:
         df: DataFrame containing app data
         feature_cols: List of feature column names
         n_estimators: Number of trees in the forest
         max_depth: Maximum depth of the trees
-        test_size: Proportion of data to use for testing
+        min_samples_split: Minimum samples required to split a node
         random_state: Random seed for reproducibility
         use_class_weight: Whether to use class weighting
         use_sample_weight: Whether to use sample weighting based on cluster_weight
+        n_splits: Number of folds for cross-validation
 
     Returns:
-        Trained model, test data, and test predictions
+        Trained model, test data, test predictions, and sample weights for test data
     """
     # Prepare the data
     X = df[feature_cols].values
     y = df["cannabis_related"].values
 
-    # Split into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
-    )
-
     # Scale the features
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # Get sample weights based on cluster_weight if available
-    train_indices = np.arange(len(df))[~df.index.isin(pd.Series(y_test).index)]
-
-    if use_sample_weight and "cluster_weight" in df.columns:
-        sample_weights = df.iloc[train_indices]["cluster_weight"].values
-        print("Using cluster weights as sample weights")
-    else:
-        sample_weights = np.ones(len(train_indices))
-        if use_sample_weight:
-            print(
-                "Warning: cluster_weight column not found, using uniform sample weights"
-            )
-        else:
-            print("Sample weighting disabled")
+    X_scaled = scaler.fit_transform(X)
 
     # Determine class weight parameter
     class_weight_param = "balanced" if use_class_weight else None
@@ -325,8 +313,7 @@ def train_model(
     else:
         print("Class weighting disabled")
 
-    # Train a random forest classifier
-    print("\nTraining Random Forest classifier...")
+    # Initialize the classifier
     rf = RandomForestClassifier(
         n_estimators=n_estimators,
         max_depth=max_depth,
@@ -334,25 +321,96 @@ def train_model(
         class_weight=class_weight_param,
         bootstrap=True,
         criterion="gini",
-        min_samples_leaf=8,
+        min_samples_leaf=min_samples_leaf,
         random_state=random_state,
         n_jobs=-1,
         verbose=1,
     )
 
-    # Fit the model with or without sample weights
-    if use_sample_weight:
-        rf.fit(X_train_scaled, y_train, sample_weight=sample_weights)
+    # Initialize StratifiedKFold
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+    # Initialize arrays to store cross-validation results
+    cv_scores = []
+    cv_predictions = []
+    cv_probabilities = []
+    cv_true_labels = []
+    cv_test_indices = []
+    cv_weighted_scores = []
+
+    print(f"\nPerforming {n_splits}-fold cross-validation...")
+
+    # Check if sample weights are available
+    has_sample_weights = use_sample_weight and "cluster_weight" in df.columns
+    if has_sample_weights:
+        print(
+            "Using cluster weights as sample weights for both training and evaluation"
+        )
+    elif use_sample_weight:
+        print("Warning: cluster_weight column not found, using uniform sample weights")
+        has_sample_weights = False
     else:
-        rf.fit(X_train_scaled, y_train)
+        print("Sample weighting disabled")
+        has_sample_weights = False
 
-    # Make predictions
-    y_pred = rf.predict(X_test_scaled)
-    y_proba = rf.predict_proba(X_test_scaled)[:, 1]
+    # Perform cross-validation
+    for fold, (train_idx, test_idx) in enumerate(skf.split(X_scaled, y)):
+        X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
 
-    # Calculate accuracy
-    accuracy = np.mean(y_pred == y_test)
-    print(f"Random Forest test accuracy: {accuracy:.4f}")
+        # Get sample weights for training
+        if has_sample_weights:
+            train_weights = df.iloc[train_idx]["cluster_weight"].values
+            test_weights = df.iloc[test_idx]["cluster_weight"].values
+        else:
+            train_weights = np.ones(len(train_idx))
+            test_weights = np.ones(len(test_idx))
+
+        # Fit the model with or without sample weights
+        if use_sample_weight:
+            rf.fit(X_train, y_train, sample_weight=train_weights)
+        else:
+            rf.fit(X_train, y_train)
+
+        # Make predictions
+        fold_pred = rf.predict(X_test)
+        fold_proba = rf.predict_proba(X_test)[:, 1]
+
+        # Calculate standard accuracy for this fold
+        fold_accuracy = np.mean(fold_pred == y_test)
+        cv_scores.append(fold_accuracy)
+
+        # Calculate weighted accuracy if using sample weights
+        if has_sample_weights:
+            weighted_correct = np.sum((fold_pred == y_test) * test_weights)
+            weighted_total = np.sum(test_weights)
+            weighted_accuracy = weighted_correct / weighted_total
+            cv_weighted_scores.append(weighted_accuracy)
+            print(
+                f"Fold {fold+1}/{n_splits} - Accuracy: {fold_accuracy:.4f}, Weighted Accuracy: {weighted_accuracy:.4f}"
+            )
+        else:
+            print(f"Fold {fold+1}/{n_splits} - Accuracy: {fold_accuracy:.4f}")
+
+        # Store predictions, true labels, and test indices for later evaluation
+        cv_predictions.extend(fold_pred)
+        cv_probabilities.extend(fold_proba)
+        cv_true_labels.extend(y_test)
+        cv_test_indices.extend(test_idx)
+
+    # Print average cross-validation scores
+    print(f"\nAverage cross-validation accuracy: {np.mean(cv_scores):.4f}")
+    if has_sample_weights:
+        print(
+            f"Average weighted cross-validation accuracy: {np.mean(cv_weighted_scores):.4f}"
+        )
+
+    # Train the final model on the entire dataset
+    print("\nTraining final model on entire dataset...")
+    if has_sample_weights:
+        rf.fit(X_scaled, y, sample_weight=df["cluster_weight"].values)
+    else:
+        rf.fit(X_scaled, y)
 
     # Create a model object
     model = {
@@ -363,10 +421,28 @@ def train_model(
         "predict_proba": lambda X: rf.predict_proba(X)[:, 1],
     }
 
-    return model, X_test_scaled, y_test, y_pred, y_proba
+    # Get sample weights for test data
+    test_sample_weights = None
+    if has_sample_weights:
+        # Reorder the weights to match the order of cv_true_labels
+        test_sample_weights = np.array(
+            [df.iloc[idx]["cluster_weight"] for idx in cv_test_indices]
+        )
+    else:
+        test_sample_weights = np.ones(len(cv_true_labels))
+
+    # For compatibility with the rest of the code, return the collected predictions from all folds
+    return (
+        model,
+        X_scaled,
+        np.array(cv_true_labels),
+        np.array(cv_predictions),
+        np.array(cv_probabilities),
+        test_sample_weights,
+    )
 
 
-def evaluate_model(y_true, y_pred, y_proba):
+def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     """
     Evaluate the model and print performance metrics.
 
@@ -374,42 +450,87 @@ def evaluate_model(y_true, y_pred, y_proba):
         y_true: True labels
         y_pred: Predicted labels
         y_proba: Predicted probabilities
+        sample_weights: Optional sample weights for weighted evaluation
 
     Returns:
         Dictionary of evaluation metrics
     """
     print("\n=== Model Evaluation ===")
 
-    # Classification report
-    print("\nClassification Report:")
+    # Check if we're using sample weights
+    using_weights = sample_weights is not None and not np.all(sample_weights == 1.0)
+
+    # Standard classification report
+    print("\nStandard Classification Report:")
     print(
         classification_report(y_true, y_pred, target_names=["Non-Cannabis", "Cannabis"])
     )
 
-    # Confusion matrix
-    print("\nConfusion Matrix:")
+    # Weighted classification report if using weights
+    if using_weights:
+        print("\nWeighted Classification Report:")
+        print(
+            classification_report(
+                y_true,
+                y_pred,
+                target_names=["Non-Cannabis", "Cannabis"],
+                sample_weight=sample_weights,
+            )
+        )
+
+    # Standard confusion matrix
+    print("\nStandard Confusion Matrix:")
     cm = confusion_matrix(y_true, y_pred)
     print(cm)
 
-    # ROC AUC score
-    roc_auc = roc_auc_score(y_true, y_proba)
-    print(f"\nROC AUC Score: {roc_auc:.4f}")
+    # Weighted confusion matrix if using weights
+    if using_weights:
+        print("\nWeighted Confusion Matrix:")
+        cm_weighted = confusion_matrix(y_true, y_pred, sample_weight=sample_weights)
+        print(cm_weighted)
 
-    # Calculate precision, recall, and F1 score
-    tn, fp, fn, tp = cm.ravel()
+        # Use the weighted confusion matrix for metrics
+        cm_for_metrics = cm_weighted
+    else:
+        cm_for_metrics = cm
+
+    # ROC AUC score (standard and weighted)
+    roc_auc = roc_auc_score(y_true, y_proba)
+    print(f"\nStandard ROC AUC Score: {roc_auc:.4f}")
+
+    if using_weights:
+        weighted_roc_auc = roc_auc_score(y_true, y_proba, sample_weight=sample_weights)
+        print(f"Weighted ROC AUC Score: {weighted_roc_auc:.4f}")
+    else:
+        weighted_roc_auc = roc_auc
+
+    # Calculate precision, recall, and F1 score from confusion matrix
+    tn, fp, fn, tp = cm_for_metrics.ravel()
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1 = (
         2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
     )
+    accuracy = (tp + tn) / (tp + tn + fp + fn)
+
+    # Calculate weighted accuracy directly if using weights
+    if using_weights:
+        weighted_accuracy = np.sum((y_pred == y_true) * sample_weights) / np.sum(
+            sample_weights
+        )
+        print(f"\nWeighted Accuracy: {weighted_accuracy:.4f}")
+    else:
+        weighted_accuracy = accuracy
 
     # Return evaluation metrics
     metrics = {
-        "accuracy": (tp + tn) / (tp + tn + fp + fn),
+        "accuracy": accuracy,
+        "weighted_accuracy": weighted_accuracy,
         "precision": precision,
         "recall": recall,
         "f1_score": f1,
         "roc_auc": roc_auc,
+        "weighted_roc_auc": weighted_roc_auc,
         "confusion_matrix": {
             "true_negative": int(tn),
             "false_positive": int(fp),
@@ -522,21 +643,23 @@ def main():
     )
     print(f"Class weighting: {'enabled' if args.use_class_weight else 'disabled'}")
     print(f"Sample weighting: {'enabled' if args.use_sample_weight else 'disabled'}")
+    print(f"Using StratifiedKFold cross-validation with {args.n_splits} folds")
 
-    model, X_test, y_test, y_pred, y_proba = train_model(
+    model, X_test, y_test, y_pred, y_proba, sample_weights = train_model(
         df,
         feature_cols,
         n_estimators=args.n_estimators,
         max_depth=args.max_depth,
-        test_size=args.test_size,
         min_samples_split=args.min_samples_split,
+        min_samples_leaf=args.min_samples_leaf,
         random_state=args.random_state,
         use_class_weight=args.use_class_weight,
         use_sample_weight=args.use_sample_weight,
+        n_splits=args.n_splits,
     )
 
     # Evaluate the model
-    metrics = evaluate_model(y_test, y_pred, y_proba)
+    metrics = evaluate_model(y_test, y_pred, y_proba, sample_weights)
 
     # Plot feature importance
     plot_feature_importance(
