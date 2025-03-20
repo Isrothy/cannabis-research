@@ -172,7 +172,9 @@ def analyze_data(df):
         )
 
 
-def plot_feature_importance(model, feature_names, output_file=None):
+def plot_feature_importance(
+    model, feature_names, output_file=None, sample_weights=None
+):
     """
     Plot feature importance from the trained model.
 
@@ -180,6 +182,7 @@ def plot_feature_importance(model, feature_names, output_file=None):
         model: Trained RandomForestClassifier
         feature_names: List of feature names
         output_file: Optional path to save the plot
+        sample_weights: Optional sample weights used during training
 
     Returns:
         None
@@ -190,7 +193,13 @@ def plot_feature_importance(model, feature_names, output_file=None):
 
     # Plot feature importances
     plt.figure(figsize=(10, 6))
-    plt.title("Feature Importances")
+
+    # Add weighted indication to title if sample weights were used
+    if sample_weights is not None and not np.all(sample_weights == 1.0):
+        plt.title("Weighted Feature Importances")
+    else:
+        plt.title("Feature Importances")
+
     plt.bar(range(len(importances)), importances[indices], align="center")
     plt.xticks(
         range(len(importances)), [feature_names[i] for i in indices], rotation=90
@@ -205,7 +214,7 @@ def plot_feature_importance(model, feature_names, output_file=None):
     plt.show()
 
 
-def plot_confusion_matrix(y_true, y_pred, output_file=None):
+def plot_confusion_matrix(y_true, y_pred, output_file=None, sample_weights=None):
     """
     Plot confusion matrix.
 
@@ -213,11 +222,19 @@ def plot_confusion_matrix(y_true, y_pred, output_file=None):
         y_true: True labels
         y_pred: Predicted labels
         output_file: Optional path to save the plot
+        sample_weights: Optional sample weights for weighted confusion matrix
 
     Returns:
         None
     """
-    cm = confusion_matrix(y_true, y_pred)
+    # Calculate confusion matrix with or without weights
+    if sample_weights is not None and not np.all(sample_weights == 1.0):
+        cm = confusion_matrix(y_true, y_pred, sample_weight=sample_weights)
+        title = "Weighted Confusion Matrix"
+    else:
+        cm = confusion_matrix(y_true, y_pred)
+        title = "Confusion Matrix"
+
     plt.figure(figsize=(8, 6))
     sns.heatmap(
         cm,
@@ -229,16 +246,16 @@ def plot_confusion_matrix(y_true, y_pred, output_file=None):
     )
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title("Confusion Matrix")
+    plt.title(title)
 
     if output_file:
         plt.savefig(output_file)
-        print(f"Confusion matrix plot saved to: {output_file}")
+        print(f"{title} saved to: {output_file}")
 
     plt.show()
 
 
-def plot_precision_recall_curve(y_true, y_score, output_file=None):
+def plot_precision_recall_curve(y_true, y_score, output_file=None, sample_weights=None):
     """
     Plot precision-recall curve.
 
@@ -246,24 +263,45 @@ def plot_precision_recall_curve(y_true, y_score, output_file=None):
         y_true: True labels
         y_score: Predicted probabilities
         output_file: Optional path to save the plot
+        sample_weights: Optional sample weights for weighted precision-recall curve
 
     Returns:
         None
     """
+    plt.figure(figsize=(8, 6))
+
+    # Standard precision-recall curve
     precision, recall, _ = precision_recall_curve(y_true, y_score)
     pr_auc = auc(recall, precision)
+    plt.plot(recall, precision, marker=".", label=f"Standard (AUC = {pr_auc:.3f})")
 
-    plt.figure(figsize=(8, 6))
-    plt.plot(recall, precision, marker=".", label=f"Random Forest (AUC = {pr_auc:.3f})")
+    # Weighted precision-recall curve if weights are provided
+    if sample_weights is not None and not np.all(sample_weights == 1.0):
+        # Calculate weighted precision-recall curve
+        precision_w, recall_w, _ = precision_recall_curve(
+            y_true, y_score, sample_weight=sample_weights
+        )
+        pr_auc_w = auc(recall_w, precision_w)
+        plt.plot(
+            recall_w,
+            precision_w,
+            marker=".",
+            linestyle="--",
+            label=f"Weighted (AUC = {pr_auc_w:.3f})",
+        )
+        title = "Weighted Precision-Recall Curve"
+    else:
+        title = "Precision-Recall Curve"
+
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-    plt.title("Precision-Recall Curve")
+    plt.title(title)
     plt.legend()
     plt.grid(True)
 
     if output_file:
         plt.savefig(output_file)
-        print(f"Precision-recall curve saved to: {output_file}")
+        print(f"{title} saved to: {output_file}")
 
     plt.show()
 
@@ -661,23 +699,28 @@ def main():
     # Evaluate the model
     metrics = evaluate_model(y_test, y_pred, y_proba, sample_weights)
 
-    # Plot feature importance
+    # Plot feature importance (with indication if weights were used)
     plot_feature_importance(
         model["model"],
         feature_cols,
         output_file=os.path.join(args.plot_dir, "feature_importance.png"),
+        sample_weights=sample_weights if args.use_sample_weight else None,
     )
 
-    # Plot confusion matrix
+    # Plot confusion matrix (weighted if sample weights are available)
     plot_confusion_matrix(
-        y_test, y_pred, output_file=os.path.join(args.plot_dir, "confusion_matrix.png")
+        y_test,
+        y_pred,
+        output_file=os.path.join(args.plot_dir, "confusion_matrix.png"),
+        sample_weights=sample_weights,
     )
 
-    # Plot precision-recall curve
+    # Plot precision-recall curve (weighted if sample weights are available)
     plot_precision_recall_curve(
         y_test,
         y_proba,
         output_file=os.path.join(args.plot_dir, "precision_recall_curve.png"),
+        sample_weights=sample_weights,
     )
 
     # Save the model
