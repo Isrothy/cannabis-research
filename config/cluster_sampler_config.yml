@@ -1,0 +1,14 @@
+collection: googleApps
+k: 8
+samples: 8
+classifiers:
+  - facebook/bart-large-mnli
+  - roberta-large-mnli
+  - valhalla/distilbart-mnli-12-9
+keywords:
+  - cannabis
+  - marijuana
+  - hemp
+  - weed
+  - dispensary
+output: data/googleAppsSamples.csv

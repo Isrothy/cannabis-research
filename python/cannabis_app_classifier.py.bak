@@ -699,18 +699,18 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     class_metrics = {}
     for cls in ["0", "1"]:  # Non-Cannabis (0) and Cannabis (1)
         class_metrics[cls] = {
-            "precision": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["precision"],
-            "recall": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["recall"],
-            "f1-score": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["f1-score"],
-            "support": int(std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["support"]),
+            "precision": std_report[cls]["precision"],
+            "recall": std_report[cls]["recall"],
+            "f1-score": std_report[cls]["f1-score"],
+            "support": int(std_report[cls]["support"]),
         }
         if using_weights:
             class_metrics[cls].update(
                 {
-                    "weighted_precision": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["precision"],
-                    "weighted_recall": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["recall"],
-                    "weighted_f1-score": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["f1-score"],
-                    "weighted_support": float(weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["support"]),
+                    "weighted_precision": weighted_report[cls]["precision"],
+                    "weighted_recall": weighted_report[cls]["recall"],
+                    "weighted_f1-score": weighted_report[cls]["f1-score"],
+                    "weighted_support": float(weighted_report[cls]["support"]),
                 }
             )
 

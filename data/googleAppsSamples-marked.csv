@@ -1,0 +1,65 @@
+appId,title,clusterLabel,clusterWeight,facebook_bart-large-mnli,roberta-large-mnli,valhalla_distilbart-mnli-12-9,cannabis,marijuana,hemp,weed,dispensary,cannabis_related
+com.upjers.molehillempire2,Molehill Empire 2,0,0.317081851,0.44272727,0.534422517,0.43641397,0,0,0,0,0,0
+com.rodolfogs.nextdooralerts,Freebie Alerts: Free Stuff App,0,0.317081851,0.187834933,0.444557697,0.50975978,0,0,0,0,0,0
+app.theatr,Theatr,0,0.317081851,0.49605355,0.365221083,0.364603788,0,0,0,0,0,0
+com.feeberse.mobile.app,Feeberse,0,0.317081851,0.37814799,0.321455389,0.465372264,0,0,0,0,0,0
+uk.gov.hmrc.ptcalc,HMRC,0,0.317081851,0.395116299,0.4639045,0.394018322,0,0,0,0,0,0
+com.achievemint.android,Evidation: Earn Health Rewards,0,0.317081851,0.332435757,0.509070694,0.505664349,0,0,0,0,0,0
+goosecreekco.android.app,Goose Creek Candle,0,0.317081851,0.416389167,0.778048754,0.445155442,0,0,0,0,0,0
+com.mysterytag.cryptominer,Crypto Miner Tycoon,0,0.317081851,0.287103623,0.440400273,0.429605365,0,0,0,0,0,0
+com.commencementbaycannabis.wallet,Commencement Bay Cannabis,1,0.018505338,0.991741836,0.93534869,0.994864523,10,0,0,0,1,1
+com.bloomdispensaries.wallet,Bloom Rewards,1,0.018505338,0.986033499,0.889265299,0.986402571,5,0,0,0,1,1
+com.cannabis.mobile,Cannabis Mobile,1,0.018505338,0.992128551,0.998235941,0.984443665,8,0,0,0,2,1
+com.cannabaze,CannaBaze - cannabis pos,1,0.018505338,0.982019603,0.816461086,0.976464868,6,0,0,0,1,1
+com.thelandingdispensary.wallet,The Landing Dispensary,1,0.018505338,0.980608523,0.99836373,0.987454236,1,0,0,0,2,1
+com.blulightdispensary.wallet,BluLight Dispensary,1,0.018505338,0.992740035,0.976028621,0.9887743,7,0,0,0,1,1
+com.enlightendispensary.wallet,Enlighten Dispensary,1,0.018505338,0.992474854,0.986126602,0.991491258,3,0,0,0,4,1
+com.plantopiacannabisdispensary.wallet,Plantopia Cannabis Dispensary,1,0.018505338,0.993277669,0.94437122,0.994472265,10,0,0,0,5,1
+de.lecturio.android.LecturioMed,Lecturio Medical Education,2,0.155160142,0.80930042,0.55650103,0.587172687,0,0,0,0,0,0
+com.games2win.weddingdressup,Super Wedding Dress Up Stylist,2,0.155160142,0.6159299,0.556331039,0.813076198,0,0,0,0,0,0
+thcm.mistraltecnologia.com,Portal THCM,2,0.155160142,0.696396768,0.81116724,0.647537231,0,0,0,0,0,0
+com.endo45.app,Endometriosis Toolkit: Endo45,2,0.155160142,0.622038901,0.497003704,0.81001395,0,0,0,0,0,0
+com.askdiem.app,Diem: Big Group Chat Energy,2,0.155160142,0.743411422,0.526382864,0.78437233,0,0,0,0,0,0
+com.centelles.josep.macetohuerto,Urban veggie garden,2,0.155160142,0.703779638,0.726911306,0.757101059,0,0,0,0,0,1
+com.sadapay.app,SadaPay: Money made simple,2,0.155160142,0.69887537,0.508699417,0.666500866,0,0,0,0,0,0
+com.canablis.paciente,blis: tenha acesso em minutos,2,0.155160142,0.764237583,0.5931952,0.733719826,0,0,0,0,0,0
+nl.lisa_is.hurley,THC Hurley,3,0.055871886,0.992841423,0.993937492,0.991210878,0,0,0,0,0,0
+app.grassandgoodness.catalog,Grass & Goodness,3,0.055871886,0.985940337,0.976844192,0.986811698,0,0,0,0,0,1
+co.shopney.herbanta,Herbanta | ŸáŸäÿ±ÿ®ÿßŸÜÿ™ÿß,3,0.055871886,0.916275561,0.972327232,0.927589119,0,0,0,0,0,0
+com.starbudsdispensary.wallet,Star Buds Dispensary,3,0.055871886,0.964960098,0.996891499,0.984279156,0,0,0,0,1,1
+com.cargosmart.reefer.shipper,Reefer Assistant,3,0.055871886,0.975295186,0.994578242,0.984559119,0,0,0,0,0,0
+com.nabawiherba.android,Nabawi Herba,3,0.055871886,0.979296625,0.98376942,0.989604354,0,0,0,0,0,0
+ca.lbcstudios.hempiretycoon,Hempire Tycoon,3,0.055871886,0.996453345,0.992066801,0.997043729,0,0,0,0,0,1
+com.tapmango.herbnlegend,Herb N Legend,3,0.055871886,0.949357569,0.983404756,0.96269983,0,0,0,0,0,0
+com.sana.healthcare.patient,Script Assist,4,0.04875445,0.992211461,0.989138246,0.989471138,5,0,0,0,0,1
+com.mascotascbd.app,Mascotas CBD,4,0.04875445,0.96500051,0.901947618,0.979349494,2,0,2,0,0,1
+com.supapass.android.player.cannabisradio,Cannabis Radio Podcast Network,4,0.04875445,0.97729826,0.947599053,0.969451964,6,0,3,0,0,1
+com.teambridge.hemp,Hemp Temps,4,0.04875445,0.994485319,0.998128951,0.996820688,2,0,2,0,0,1
+co.wholesome.uintah,WholesomeCo,4,0.04875445,0.97092694,0.997698247,0.983610034,2,0,0,0,0,1
+com.GrowAppCannabisGuide,GrowApp | Cannabis Guide,4,0.04875445,0.996142685,0.948490918,0.981689334,3,0,0,0,0,1
+com.smoaklandmd.smoakland,Smoakland Cannabis Delivery,4,0.04875445,0.996397436,0.99854058,0.996027112,4,0,0,0,0,1
+com.thestrainapp.greengrowers,Green Growers,4,0.04875445,0.995002985,0.99759018,0.997283697,2,0,0,0,0,1
+com.inmobi.weather,Weather,5,0.024199288,0.434345841,0.51511246,0.404286861,0,0,0,1,0,0
+com.htec.gardenize,Gardenize: Garden & Plant care,5,0.024199288,0.743351221,0.47425592,0.84724319,0,0,0,1,0,0
+com.ikeyboard.theme.luminous.smoke.weed,Luminous Smoke Weed Keyboard T,5,0.024199288,0.737851143,0.526053131,0.812107623,0,0,0,23,0,1
+com.ikeyboard.theme.neon.blue.weed,Neon Blue Weed Keyboard Theme,5,0.024199288,0.523825347,0.568603039,0.825459957,0,0,0,17,0,1
+com.ikeyboard.theme.neon.drip.weed,Neon Drip Weed Keyboard Backgr,5,0.024199288,0.81050098,0.55169624,0.80810833,0,0,0,14,0,1
+io.ludum.wfstreets,Weed Street,5,0.024199288,0.982202172,0.759096921,0.964228392,0,1,1,8,0,1
+com.beermatsoftwarellc.dopewarsfree,Dope Wars (Weed Edition) Lite,5,0.024199288,0.9898963,0.93603313,0.98771787,0,0,0,2,0,0
+com.ikeyboard.theme.reggae.rasta.weed,Reggae Rasta Weed Theme,5,0.024199288,0.696034491,0.573136389,0.885604382,0,0,0,8,0,1
+com.Deox.MatchThree,"Puzzle Weed Story: ""Wake&Bake""",6,0.013523132,0.987138987,0.843855143,0.987031639,3,0,0,6,0,1
+com.weedmaps.app.android,Weedmaps: Buy Local Weed,6,0.013523132,0.984514117,0.901242316,0.944824159,13,2,1,4,2,1
+io.portal420.app,420Portal: Weed & Dispensaries,6,0.013523132,0.997328877,0.99701113,0.995779932,4,3,0,1,0,1
+com.weedtv,Weed TV: Good Vibes,6,0.013523132,0.95624948,0.826364458,0.944820404,6,0,0,3,0,1
+com.triactivemedia.weedworld,Weed World Magazine,6,0.013523132,0.96018809,0.778185189,0.981923819,1,3,0,5,0,1
+com.LDRLY.budmatch,Bud Farm: Munchie Match,6,0.013523132,0.979433715,0.686914146,0.994966626,2,1,0,9,0,1
+com.ifeanyi.grounded,Grounded - Quit Weed Tracker,6,0.013523132,0.991166771,0.73367018,0.983191669,9,3,1,19,0,1
+de.weed.app,"Weed.de: Cannabis Medizin, CBD",6,0.013523132,0.987923324,0.887217939,0.97550207,16,0,0,7,0,1
+com.microsoft.office.word,Microsoft Word: Edit Documents,7,0.366903915,0.63149679,0.534729064,0.604895592,0,0,0,0,0,0
+com.amazon.kindle,Amazon Kindle,7,0.366903915,0.554081202,0.592927814,0.705064654,0,0,0,0,0,0
+com.tandd.android.thermoweb,T&D Thermo,7,0.366903915,0.558743119,0.530733705,0.561257303,0,0,0,0,0,1
+com.vng.farm.skygarden,Farming Paradise - Sky Garden,7,0.366903915,0.598355174,0.571851611,0.60588431,0,0,0,0,0,0
+com.gameisart.witchspotionshop,Witch's Potion Shop,7,0.366903915,0.511395395,0.861303151,0.54181916,0,0,0,0,0,0
+com.ubisoft.dragonfire,South Park: Phone Destroyer‚Ñ¢,7,0.366903915,0.603393734,0.522459924,0.600273728,0,0,0,0,0,0
+com.waze,Waze Navigation & Live Traffic,7,0.366903915,0.368197084,0.43454814,0.587492645,0,0,0,0,0,0
+com.cookapps.taileddemonslayer,TailedDemonSlayer - Idle RPG,7,0.366903915,0.588991463,0.5934605,0.447517932,0,0,0,0,0,0

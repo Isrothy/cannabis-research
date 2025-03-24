@@ -1,0 +1,20 @@
+collection: "appleApps"
+# collection: "googleApps"
+mode: "cluster"
+# mode: "test"
+k: 8
+classifiers:
+  - "facebook/bart-large-mnli"
+  - "roberta-large-mnli"
+  - "valhalla/distilbart-mnli-12-9"
+keywords:
+  - cannabis
+  - marijuana
+  - hemp
+  - weed
+  - dispensary
+k_min: 2
+k_max: 20
+n_runs: 10
+output: "img/clustering-loss-appleApps.png"
+# output: "img/clustering-loss-googleApps.png"

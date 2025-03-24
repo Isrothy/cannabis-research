@@ -20,26 +20,20 @@ def print_progress(current, total, bar_length=50):
     sys.stdout.flush()
 
 
-def classify_and_update_records(collection_name, model_name, task):
+def classify_and_update_records(collection_name, model_name):
     mongo_uri = os.getenv("MONGO_URI")
     if not mongo_uri:
         raise ValueError("Environment variable MONGO_URI is not set.")
 
-    if task.lower() == "sentiment":
-        classifier = pipeline("text-classification", model=model_name)
-    elif task.lower() == "classification":
-        classifier = pipeline("zero-shot-classification", model=model_name)
-    else:
-        raise ValueError("Task must be either 'sentiment' or 'classification'.")
+    classifier = pipeline("zero-shot-classification", model=model_name)
 
     client = MongoClient(mongo_uri)
     db = client.get_default_database()
     collection = db[collection_name]
 
     normalized_model_name = model_name.replace("/", "_")
-    field_name = f"classifier-score.{normalized_model_name}"
+    field_name = f"classifierScores.{normalized_model_name}"
     query = {
-        "description": {"$exists": True},
         field_name: {"$exists": False},
     }
 
@@ -51,26 +45,21 @@ def classify_and_update_records(collection_name, model_name, task):
     count = 0
     for record in records:
         count += 1
+        title = record.get("title")
         desc = record.get("description")
+        if not title:
+            title = ""
         if not desc:
-            print(f"\nNo description found in record: {record}")
-            continue
+            desc = ""
 
-        if task.lower() == "sentiment":
-            # Run sentiment analysis using the text-classification pipeline.
-            result = classifier(desc, truncation=True)[0]
-            label = result["label"]
-            score = result["score"]
-            # Map sentiment to a cannabis-related score.
-            cannabis_score = score if label.upper() == "POSITIVE" else 1 - score
-        else:
-            # Run zero-shot classification.
-            result = classifier(
-                desc, candidate_labels, hypothesis_template="This app is {}"
-            )
-            cannabis_score = result["scores"][
-                result["labels"].index("cannabis-related app")
-            ]
+        result = classifier(
+            f"This app is {title}. The description is: {desc}",
+            candidate_labels,
+            hypothesis_template="This app is {}",
+        )
+        cannabis_score = result["scores"][
+            result["labels"].index("cannabis-related app")
+        ]
 
         collection.update_one(
             {"_id": record["_id"]}, {"$set": {field_name: cannabis_score}}
@@ -97,13 +86,6 @@ if __name__ == "__main__":
         required=True,
         help="Name of the Hugging Face model to use in the pipeline.",
     )
-    parser.add_argument(
-        "--task",
-        type=str,
-        required=True,
-        choices=["sentiment", "classification"],
-        help="Type of analysis to perform: 'sentiment' or 'classification'.",
-    )
     args = parser.parse_args()
 
-    classify_and_update_records(args.collection, args.model, args.task)
+    classify_and_update_records(args.collection, args.model)

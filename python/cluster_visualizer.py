@@ -1,31 +1,26 @@
 import os
-import argparse
-import yaml
+import configargparse
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from pymongo import MongoClient
 from pandas.plotting import parallel_coordinates
 import seaborn as sns
 
 
-def load_config(config_path):
-    """Load YAML configuration file."""
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-    return config
-
-
-def get_data_from_db(collection_name, classifier_names, k_value):
+def get_data_from_db(collection_name, classifier_names, keywords):
     """
-    Connect to MongoDB and fetch documents with cluster labels.
+    Connect to MongoDB and fetch documents with cluster labels, classifier scores,
+    and keyword counts.
 
     Args:
         collection_name: MongoDB collection name
         classifier_names: List of classifier names to include
+        keywords: List of keywords to include
         k_value: The k value used for clustering
 
     Returns:
-        DataFrame containing the clustered data and field_mapping
+        DataFrame containing the clustered data and feature_columns
     """
     mongo_uri = os.getenv("MONGO_URI")
     if not mongo_uri:
@@ -35,21 +30,22 @@ def get_data_from_db(collection_name, classifier_names, k_value):
     db = client.get_default_database()
     collection = db[collection_name]
 
-    field_mapping = {}
-    # Project app title, id, and cluster label
-    projection = {"title": 1, "appId": 1, "cluster_label": 1, "_id": 0}
+    projection = {"title": 1, "appId": 1, "clusterLabel": 1, "_id": 0}
+    feature_columns = []
 
-    # Add classifier scores to projection
     for classifier in classifier_names:
-        normalized = classifier.replace("/", "_")
-        nested_field = f"classifier-score.{normalized}"
-        field_mapping[nested_field] = normalized
-        projection[nested_field] = 1
+        regularized = classifier.replace("/", "_")
+        field_name = f"classifierScores.{regularized}"
+        projection[field_name] = 1
+        feature_columns.append(regularized)
 
-    # Build query to find records with cluster_label
-    query = {"cluster_label": {"$exists": True}}
+    for keyword in keywords:
+        field_name = f"keywordCounts.{keyword}"
+        projection[field_name] = 1
+        feature_columns.append(f"ky_{keyword}_normalized")
 
-    # Retrieve the data
+    query = {"clusterLabel": {"$exists": True}}
+
     cursor = collection.find(query, projection)
     data = list(cursor)
 
@@ -58,32 +54,38 @@ def get_data_from_db(collection_name, classifier_names, k_value):
             f"No data found with cluster labels in collection {collection_name}"
         )
 
-    # Flatten the data
     flattened_data = []
     for doc in data:
         flat_doc = {}
-        flat_doc["title"] = doc.get("title")
-        flat_doc["appId"] = doc.get("appId")
-        flat_doc["cluster_label"] = doc.get("cluster_label")
+        flat_doc["title"] = doc.get("title", "")
+        flat_doc["appId"] = doc.get("appId", "")
+        flat_doc["cluster_label"] = doc.get("clusterLabel")
 
-        nested = doc.get("classifier-score", {})
-        for nested_field, normalized in field_mapping.items():
-            key = nested_field.split(".", 1)[1]
-            if key in nested:
-                flat_doc[normalized] = nested[key]
+        classifier_scores = doc.get("classifierScores", {})
+        for classifier in classifier_names:
+            regularized = classifier.replace("/", "_")
+            score = classifier_scores.get(regularized, 0.0)
+            flat_doc[regularized] = score
+
+        keyword_counts = doc.get("keywordCounts", {})
+        for keyword in keywords:
+            count = keyword_counts.get(keyword, 0)
+            flat_doc[f"ky_{keyword}_count"] = count
+            flat_doc[f"ky_{keyword}_normalized"] = 1 - np.exp(-count)
+
         flattened_data.append(flat_doc)
 
     df = pd.DataFrame(flattened_data)
-    return df, field_mapping
+    return df, feature_columns
 
 
 def print_cluster_statistics(df, feature_cols):
     """
-    Print statistics for each classifier in each cluster.
+    Print statistics for each feature in each cluster.
 
     Args:
-        df: DataFrame with cluster labels and classifier scores
-        feature_cols: List of classifier column names
+        df: DataFrame with cluster labels and feature values
+        feature_cols: List of feature column names
     """
     print("\n" + "=" * 80)
     print("CLUSTER STATISTICS")
@@ -99,7 +101,11 @@ def print_cluster_statistics(df, feature_cols):
 
         for col in feature_cols:
             # Get friendly name for display
-            friendly_name = col
+            if col.startswith("ky_") and col.endswith("_normalized"):
+                friendly_name = f"Keyword: {col[3:-12]}"
+            else:
+                friendly_name = f"Classifier: {col}"
+
             if col in df.columns:
                 stats = cluster_df[col].describe(percentiles=[0.25, 0.75])
                 print(f"  {friendly_name}:")
@@ -113,26 +119,17 @@ def print_cluster_statistics(df, feature_cols):
 
 def create_boxplots(df, feature_cols, output_prefix=None):
     """
-    Create box plots for each cluster showing classifier scores.
+    Create box plots for each cluster showing feature values.
+    Creates separate plots for classifier scores and keyword counts.
 
     Args:
-        df: DataFrame with cluster labels and classifier scores
-        feature_cols: List of classifier column names
+        df: DataFrame with cluster labels and feature values
+        feature_cols: List of feature column names
         output_prefix: Prefix for output files
     """
-    # Melt the DataFrame for easier plotting
-    plot_df = df.melt(
-        id_vars=["cluster_label", "appId", "title"],
-        value_vars=feature_cols,
-        var_name="Classifier",
-        value_name="Score",
-    )
+    classifier_cols = [col for col in feature_cols if not col.startswith("ky_")]
+    keyword_cols = [col for col in feature_cols if col.startswith("ky_")]
 
-    # Create a figure with subplots
-    plt.figure(figsize=(14, 10))
-
-    # Create box plot with clusters on x-axis and reduced outliers
-    # Set flierprops to reduce the number of outliers displayed
     flierprops = dict(
         marker="o",
         markerfacecolor="gray",
@@ -142,77 +139,85 @@ def create_boxplots(df, feature_cols, output_prefix=None):
         alpha=0.5,
     )
 
-    # Create box plot with clusters on x-axis
-    sns.boxplot(
-        x="cluster_label",
-        y="Score",
-        hue="Classifier",
-        data=plot_df,
-        flierprops=flierprops,  # Reduce outlier visibility
-        fliersize=2,  # Make outlier points smaller
-        showfliers=True,  # Still show outliers but with reduced visibility
+    if classifier_cols:
+        classifier_df = df.melt(
+            id_vars=["cluster_label", "appId", "title"],
+            value_vars=classifier_cols,
+            var_name="Feature",
+            value_name="Score",
+        )
+
+        plt.figure(figsize=(14, 10))
+        sns.boxplot(
+            x="cluster_label",
+            y="Score",
+            hue="Feature",
+            data=classifier_df,
+            flierprops=flierprops,
+            fliersize=2,
+            showfliers=True,
+        )
+
+        plt.title("Classifier Scores by Cluster", fontsize=16)
+        plt.xlabel("Cluster", fontsize=14)
+        plt.ylabel("Score", fontsize=14)
+        plt.legend(title="Classifier", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.tight_layout()
+
+        if output_prefix:
+            output_file = f"{output_prefix}_classifier_boxplots.png"
+            plt.savefig(output_file)
+            print(f"Classifier box plots saved to: {output_file}")
+
+        plt.show()
+
+    if keyword_cols:
+        keyword_mapping = {col: col[3:-11] for col in keyword_cols}
+
+        keyword_df = df.melt(
+            id_vars=["cluster_label", "appId", "title"],
+            value_vars=keyword_cols,
+            var_name="Feature",
+            value_name="Score",
+        )
+
+        keyword_df["Keyword"] = keyword_df["Feature"].map(
+            lambda x: keyword_mapping.get(x, x)
+        )
+
+        plt.figure(figsize=(14, 10))
+        sns.boxplot(
+            x="cluster_label",
+            y="Score",
+            hue="Keyword",
+            data=keyword_df,
+            flierprops=flierprops,
+            fliersize=2,
+            showfliers=True,
+        )
+
+        plt.title("Normalized Keyword Counts by Cluster", fontsize=16)
+        plt.xlabel("Cluster", fontsize=14)
+        plt.ylabel("Normalized Count", fontsize=14)
+        plt.legend(title="Keyword", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.tight_layout()
+
+        if output_prefix:
+            output_file = f"{output_prefix}_keyword_boxplots.png"
+            plt.savefig(output_file)
+            print(f"Keyword box plots saved to: {output_file}")
+
+        plt.show()
+
+
+def parse_args():
+    parser = configargparse.ArgumentParser(
+        description="Visualize and analyze clusters from MongoDB data.",
+        config_file_parser_class=configargparse.YAMLConfigFileParser,
     )
-
-    plt.title("Classifier Scores by Cluster", fontsize=16)
-    plt.xlabel("Cluster", fontsize=14)
-    plt.ylabel("Score", fontsize=14)
-    plt.legend(title="Classifier", bbox_to_anchor=(1.05, 1), loc="upper left")
-    plt.tight_layout()
-
-    # Save the plot if output prefix is specified
-    if output_prefix:
-        output_file = f"{output_prefix}_boxplots.png"
-        plt.savefig(output_file)
-        print(f"Box plots saved to: {output_file}")
-
-    plt.show()
-
-
-def create_parallel_coordinates_plot(df, feature_cols, output_prefix=None):
-    """
-    Create a parallel coordinates plot to visualize clusters.
-
-    Args:
-        df: DataFrame with cluster labels and classifier scores
-        feature_cols: List of classifier column names
-        output_prefix: Prefix for output files
-    """
-    # Create a copy of the DataFrame with only the needed columns
-    plot_df = df[["cluster_label"] + feature_cols].copy()
-
-    # Normalize the data for better visualization
-    for col in feature_cols:
-        if col in plot_df.columns:
-            min_val = plot_df[col].min()
-            max_val = plot_df[col].max()
-            if max_val > min_val:  # Avoid division by zero
-                plot_df[col] = (plot_df[col] - min_val) / (max_val - min_val)
-
-    # Create the parallel coordinates plot
-    plt.figure(figsize=(14, 8))
-
-    # Use cluster_label as the class column
-    parallel_coordinates(plot_df, "cluster_label")
-
-    plt.title("Parallel Coordinates Plot of Clusters", fontsize=16)
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-
-    # Save the plot if output prefix is specified
-    if output_prefix:
-        output_file = f"{output_prefix}_parallel_coordinates.png"
-        plt.savefig(output_file)
-        print(f"Parallel coordinates plot saved to: {output_file}")
-
-    plt.show()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Visualize and analyze clusters from MongoDB data."
+    parser.add_argument(
+        "--config", is_config_file=True, help="Path to YAML configuration file"
     )
-    parser.add_argument("--config", type=str, help="Path to YAML config file")
     parser.add_argument("--collection", type=str, help="MongoDB collection name")
     parser.add_argument("--k", type=int, help="The k value used for clustering")
     parser.add_argument(
@@ -222,51 +227,47 @@ def main():
         help="List of classifier names to use as features",
     )
     parser.add_argument(
+        "--keywords",
+        type=str,
+        nargs="+",
+        help="List of keywords to use as features",
+    )
+    parser.add_argument(
         "--output_prefix",
         type=str,
         help="Prefix for output image files",
     )
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
-    # Load YAML config if provided
-    config = {}
-    if args.config:
-        config = load_config(args.config)
+def main():
+    args = parse_args()
 
-    # Command-line arguments override YAML config
-    collection_name = args.collection or config.get("collection")
-    classifier_names = args.classifiers or config.get("classifiers")
-    k_value = args.k if args.k is not None else config.get("k")
-    output_prefix = args.output_prefix or config.get("output_prefix")
+    if not args.collection or args.k is None:
+        raise Exception("Error: Collection name and k value must be provided.")
 
-    if not collection_name or not classifier_names or k_value is None:
-        raise Exception(
-            "Error: Collection name, classifier names, and k value must be provided."
-        )
+    if not args.classifiers and not args.keywords:
+        raise Exception("Error: At least one classifier or keyword must be provided.")
 
-    print(f"Retrieving data from collection {collection_name} with k={k_value}...")
-    df, field_mapping = get_data_from_db(collection_name, classifier_names, k_value)
+    classifier_names = args.classifiers or []
+    keywords = args.keywords or []
+
+    print(f"Retrieving data from collection {args.collection} with k={args.k}...")
+    print(f"Using {len(classifier_names)} classifiers and {len(keywords)} keywords")
+
+    df, feature_columns = get_data_from_db(args.collection, classifier_names, keywords)
 
     print(f"Retrieved {len(df)} records with cluster labels.")
 
-    # Use the normalized classifier names as our feature columns
-    feature_cols = list(field_mapping.values())
-
-    if not feature_cols:
-        print("No feature columns found. Please specify valid classifiers.")
+    if not feature_columns:
+        print("No feature columns found. Please specify valid classifiers or keywords.")
         return
 
-    print(f"Using {len(feature_cols)} features for analysis and visualization")
+    print(f"Using {len(feature_columns)} features for analysis and visualization")
 
-    # Print statistics for each classifier in each cluster
-    print_cluster_statistics(df, feature_cols)
+    print_cluster_statistics(df, feature_columns)
 
-    # Create box plots
-    create_boxplots(df, feature_cols, output_prefix)
-
-    # Create parallel coordinates plot
-    create_parallel_coordinates_plot(df, feature_cols, output_prefix)
+    create_boxplots(df, feature_columns, args.output_prefix)
 
 
 if __name__ == "__main__":

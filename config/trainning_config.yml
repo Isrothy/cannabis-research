@@ -1,0 +1,22 @@
+apple_data: "data/appleAppsSamples-marked.csv"
+google_data: "data/googleAppsSamples-marked.csv"
+output_model: "models/cannabis_app_classifier.joblib"
+output_metrics: "models/cannabis_app_metrics.json"
+plot_dir: "img"
+n_estimators: 10
+max_depth: 5
+min_samples_leaf: 5
+min_samples_split: 10
+random_state: 42
+n_splits: 5
+use_class_weight: true
+use_sample_weight: true
+feature_columns:
+  - "facebook_bart-large-mnli"
+  - "roberta-large-mnli"
+  - "valhalla_distilbart-mnli-12-9"
+  - "cannabis"
+  - "marijuana"
+  - "hemp"
+  - "weed"
+  - "dispensary"

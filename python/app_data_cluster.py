@@ -1,6 +1,5 @@
 import os
-import argparse
-import yaml
+import configargparse
 import pandas as pd
 import numpy as np
 from pymongo import MongoClient
@@ -8,25 +7,70 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 
-def load_config(config_path):
-    """Load YAML configuration file."""
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-    return config
+def parse_args():
+    parser = configargparse.ArgumentParser(
+        description="Cluster MongoDB data and either test clustering parameters or perform clustering.",
+        config_file_parser_class=configargparse.YAMLConfigFileParser,
+    )
+    # General arguments
+    parser.add_argument(
+        "--config", is_config_file=True, help="Path to YAML configuration file"
+    )
+    parser.add_argument("--collection", type=str, help="MongoDB collection name")
+    parser.add_argument(
+        "--classifiers", type=str, nargs="+", help="List of classifier names"
+    )
+    parser.add_argument("--keywords", type=str, nargs="+", help="List of keywords")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["test", "cluster"],
+        default=None,
+        help="Mode: 'test' for parameter testing, 'cluster' for clustering data",
+    )
+    # Arguments for test mode
+    parser.add_argument(
+        "--k_min", type=int, default=2, help="Minimum number of clusters (k)"
+    )
+    parser.add_argument(
+        "--k_max", type=int, default=10, help="Maximum number of clusters (k)"
+    )
+    parser.add_argument(
+        "--n_runs", type=int, default=10, help="Number of KMeans runs per k"
+    )
+    # Arguments for cluster mode
+    parser.add_argument(
+        "--k", type=int, default=10, help="Number of clusters (k) for cluster mode"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="output.csv",
+        help="Output file for graph (test mode) or CSV (cluster mode)",
+    )
+    return parser.parse_args()
 
 
-def get_data_from_db(collection_name, classifier_names):
+def get_data_from_db(collection_name, classifier_names, keywords):
     """
-    Connect to MongoDB and fetch documents that contain the nested fields.
+    Connect to MongoDB and fetch documents that contain classifier scores and keyword counts.
+
     For each classifier name (e.g. "facebook/bart-large-mnli"),
     we normalize it (replace "/" with "_") and then build the field name as:
       "classifier-score.{normalized_name}"
 
+    For keywords, we fetch the counts from the "keywords" field.
+
     Also projects additional fields like "title" and "appId".
 
+    Args:
+        collection_name: Name of the MongoDB collection
+        classifier_names: List of classifier names to use as features
+        keywords: List of keywords to use as features
+
     Returns:
-      flattened_data: list of dicts with keys "title", "appId", and each normalized classifier.
-      field_mapping: dict mapping the nested field to the normalized classifier name.
+        flattened_data: list of dicts with keys "title", "appId", normalized classifiers, and keyword counts
+        feature_columns: list of all feature column names (classifiers and keywords)
     """
     mongo_uri = os.getenv("MONGO_URI")
     if not mongo_uri:
@@ -36,32 +80,49 @@ def get_data_from_db(collection_name, classifier_names):
     db = client.get_default_database()
     collection = db[collection_name]
 
-    field_mapping = {}
-    # Also project app title and id:
-    projection = {"title": 1, "appId": 1}
-    for classifier in classifier_names:
-        normalized = classifier.replace("/", "_")
-        nested_field = f"classifier-score.{normalized}"
-        field_mapping[nested_field] = normalized
-        projection[nested_field] = 1
-    projection["_id"] = 0
+    projection = {"_id": 0, "title": 1, "appId": 1}
+    query_conditions = []
+    feature_columns = []
 
-    query = {"$and": [{field: {"$exists": True}} for field in field_mapping.keys()]}
+    for classifier_name in classifier_names:
+        regularized_classifier_name = classifier_name.replace("/", "_")
+        field_name = f"classifierScores.{regularized_classifier_name}"
+        projection[field_name] = 1
+        query_conditions.append({field_name: {"$exists": True}})
+        feature_columns.append(regularized_classifier_name)
+
+    for keyword in keywords:
+        field_name = f"keywordCounts.{keyword}"
+        projection[field_name] = 1
+        query_conditions.append({field_name: {"$exists": True}})
+        feature_columns.append(f"ky_{keyword}_normalized")
+
+    query = {"$and": query_conditions} if query_conditions else {}
     cursor = collection.find(query, projection)
-    data = list(cursor)
+    count = collection.count_documents(query)
+    print(f"Found {count} documents with required fields")
 
-    flattened_data = []
-    for doc in data:
+    data = []
+    for doc in cursor:
         flat_doc = {}
-        flat_doc["title"] = doc.get("title")
-        flat_doc["appId"] = doc.get("appId")
-        nested = doc.get("classifier-score", {})
-        for nested_field, normalized in field_mapping.items():
-            key = nested_field.split(".", 1)[1]
-            if key in nested:
-                flat_doc[normalized] = nested[key]
-        flattened_data.append(flat_doc)
-    return flattened_data, field_mapping
+        flat_doc["title"] = doc.get("title", "")
+        flat_doc["appId"] = doc.get("appId", "")
+
+        classifier_scores = doc.get("classifierScores", {})
+        for classifier_name in classifier_names:
+            regularized_classifier_name = classifier_name.replace("/", "_")
+            score = classifier_scores.get(regularized_classifier_name)
+            flat_doc[regularized_classifier_name] = score
+
+        keyword_counts = doc.get("keywordCounts", {})
+        for keyword in keywords:
+            count = keyword_counts.get(keyword)
+            flat_doc[f"ky_{keyword}_count"] = count
+            flat_doc[f"ky_{keyword}_normalized"] = 1 - np.exp(-count)
+
+        data.append(flat_doc)
+
+    return data, feature_columns
 
 
 def evaluate_kmeans(X, k_values, n_runs):
@@ -116,109 +177,50 @@ def cluster_data(df, feature_cols, k):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Cluster MongoDB data and either test clustering parameters or perform clustering."
-    )
-    # General arguments
-    parser.add_argument("--config", type=str, help="Path to YAML config file")
-    parser.add_argument("--collection", type=str, help="MongoDB collection name")
-    parser.add_argument(
-        "--classifiers", type=str, nargs="+", help="List of classifier names"
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["test", "cluster"],
-        default=None,
-        help="Mode: 'test' for parameter testing, 'cluster' for clustering data",
-    )
-    # Arguments for test mode
-    parser.add_argument(
-        "--k_min", type=int, default=None, help="Minimum number of clusters (k)"
-    )
-    parser.add_argument(
-        "--k_max", type=int, default=None, help="Maximum number of clusters (k)"
-    )
-    parser.add_argument(
-        "--n_runs", type=int, default=None, help="Number of KMeans runs per k"
-    )
-    # Arguments for cluster mode
-    parser.add_argument(
-        "--k", type=int, default=None, help="Number of clusters (k) for cluster mode"
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Output file for graph (test mode) or CSV (cluster mode)",
-    )
-    args = parser.parse_args()
+    args = parse_args()
 
-    config = {}
-    if args.config:
-        config = load_config(args.config)
-
-    collection_name = args.collection or config.get("collection")
-    classifier_names = args.classifiers or config.get("classifiers")
-    mode = args.mode or config.get("mode", "cluster")
-    output_filename = args.output or config.get("output")
-
-    if not collection_name or not classifier_names:
+    if not args.collection:
         raise Exception(
             "Error: Both collection name and classifier names must be provided."
         )
 
     print("Connecting to DB and fetching data...")
-    data, field_mapping = get_data_from_db(collection_name, classifier_names)
+    data, feature_columns = get_data_from_db(
+        args.collection, args.classifiers, args.keywords
+    )
     if not data:
         raise Exception("No data found matching the criteria.")
     df = pd.DataFrame(data)
     print(f"Fetched {len(df)} records.")
 
-    # Use the normalized classifier names (from the field mapping) as our field list.
-    original_field_list = list(field_mapping.values())
-
-    # Instead of normalization, we use the original scores.
     print(
-        "Using original classifier scores. Feature matrix shape:",
-        df[original_field_list].shape,
+        "Using classifier scores and keyword counts. Feature matrix shape:",
+        df[feature_columns].shape,
     )
 
-    if mode == "test":
-        # For test mode, use k_min, k_max, and n_runs.
-        k_min = args.k_min if args.k_min is not None else config.get("k_min", 2)
-        k_max = args.k_max if args.k_max is not None else config.get("k_max", 10)
-        n_runs = args.n_runs if args.n_runs is not None else config.get("n_runs", 5)
-        k_values = list(range(k_min, k_max + 1))
-        k_results = evaluate_kmeans(df[original_field_list].values, k_values, n_runs)
-        if not output_filename:
-            output_filename = "clustering_loss.png"
+    if args.mode == "test":
+        k_values = list(range(args.k_min, args.k_max + 1))
+        k_results = evaluate_kmeans(df[feature_columns].values, k_values, args.n_runs)
+        output_filename = args.output if args.output else "clustering_loss.png"
         plot_results(k_results, output_filename)
-    elif mode == "cluster":
-        # For cluster mode, use k to cluster the data and write to DB
-        k_value = args.k if args.k is not None else config.get("k", 6)
+    elif args.mode == "cluster":
+        clustered_df = cluster_data(df, feature_columns, k=args.k)
 
-        # Cluster the data
-        clustered_df = cluster_data(df, original_field_list, k=k_value)
-
-        # Connect to MongoDB to update records with cluster information
         mongo_uri = os.getenv("MONGO_URI")
         client = MongoClient(mongo_uri)
         db = client.get_default_database()
-        collection = db[collection_name]
+        collection = db[args.collection]
 
-        # Update each record in the database with its cluster assignment
         update_count = 0
         for _, row in clustered_df.iterrows():
             app_id = row["appId"]
             cluster_label = int(row["cluster"])
 
-            # Update the document in MongoDB
             result = collection.update_one(
                 {"appId": app_id},
                 {
                     "$set": {
-                        "cluster_label": cluster_label,
+                        "clusterLabel": cluster_label,
                     }
                 },
             )
@@ -226,7 +228,7 @@ def main():
             if result.modified_count > 0:
                 update_count += 1
 
-        print(f"Updated {update_count} records with cluster information (k={k_value}).")
+        print(f"Updated {update_count} records with cluster information (k={args.k}).")
 
 
 if __name__ == "__main__":
