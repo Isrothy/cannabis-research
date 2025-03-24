@@ -1,0 +1,35 @@
+# Cluster Sampler Configuration
+
+# MongoDB collection name
+collection: apps
+
+# K value for clustering
+k: 5
+
+# Number of samples per cluster
+samples: 10
+
+# List of classifiers to include in output
+classifiers:
+  - adult_content_classifier
+  - cannabis_classifier
+  - cbd_classifier
+  - thc_classifier
+  - dispensary_classifier
+
+# Output file path
+output: data/cluster_samples.csv
+# Cluster Sampler Configuration
+
+# MongoDB collection name
+collection: apps
+
+# K value for clustering
+k: 5
+
+# Number of samples per cluster
+samples: 10
+
+# Output file path
+output: data/cluster_samples.csv
+

@@ -3,10 +3,10 @@ google_data: "data/googleAppsSamples-marked.csv"
 output_model: "models/cannabis_app_classifier.joblib"
 output_metrics: "models/cannabis_app_metrics.json"
 plot_dir: "img"
-n_estimators: 10
-max_depth: 5
-min_samples_leaf: 5
-min_samples_split: 10
+n_estimators: 20
+max_depth: 4
+min_samples_leaf: 8
+min_samples_split: 12
 random_state: 42
 n_splits: 5
 use_class_weight: true

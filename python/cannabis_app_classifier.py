@@ -187,81 +187,28 @@ def plot_feature_importance(
     Returns:
         None
     """
-    # Get feature importance
     importances = model.feature_importances_
     indices = np.argsort(importances)[::-1]
-    sorted_importances = importances[indices]
-    sorted_feature_names = [feature_names[i] for i in indices]
 
-    # Plot feature importances
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(10, 6))
 
-    # Add weighted indication to title if sample weights were used
-    using_weights = sample_weights is not None and not np.all(sample_weights == 1.0)
-    if using_weights:
-        plt.title("Weighted Feature Importances", fontsize=14)
+    if sample_weights is not None and not np.all(sample_weights == 1.0):
+        plt.title("Weighted Feature Importances")
     else:
-        plt.title("Feature Importances", fontsize=14)
+        plt.title("Feature Importances")
 
-    # Create colormap based on importance
-    colors = plt.cm.viridis(sorted_importances / max(sorted_importances))
-
-    # Plot bars
-    bars = plt.bar(
-        range(len(sorted_importances)),
-        sorted_importances,
-        align="center",
-        color=colors,
-        alpha=0.8,
-    )
-
-    # Add value labels on top of bars
-    for i, bar in enumerate(bars):
-        height = bar.get_height()
-        plt.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            height + 0.002,
-            f"{sorted_importances[i]:.3f}",
-            ha="center",
-            va="bottom",
-            rotation=0,
-            fontsize=9,
-        )
-
+    plt.bar(range(len(importances)), importances[indices], align="center")
     plt.xticks(
-        range(len(sorted_importances)), sorted_feature_names, rotation=90, fontsize=10
+        range(len(importances)), [feature_names[i] for i in indices], rotation=90
     )
-    plt.xlim([-1, len(sorted_importances)])
-    plt.ylabel("Importance", fontsize=12)
-    plt.grid(axis="y", linestyle="--", alpha=0.7)
-
-    # Add explanation text
-    if using_weights:
-        plt.figtext(
-            0.5,
-            0.01,
-            "Note: Feature importances are calculated with sample weights, giving more influence to samples with higher weights.",
-            ha="center",
-            fontsize=10,
-            bbox={"facecolor": "orange", "alpha": 0.2, "pad": 5},
-        )
-
-    plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Make room for the note at the bottom
+    plt.xlim([-1, len(importances)])
+    plt.tight_layout()
 
     if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
+        plt.savefig(output_file)
         print(f"Feature importance plot saved to: {output_file}")
 
     plt.show()
-
-    # Print tabular feature importance for easier reference
-    print("\nFeature Importance Ranking:")
-    print(f"{'Rank':<5} {'Feature':<30} {'Importance':<10}")
-    print("-" * 45)
-    for i, (name, importance) in enumerate(
-        zip(sorted_feature_names, sorted_importances)
-    ):
-        print(f"{i+1:<5} {name:<30} {importance:.4f}")
 
 
 def plot_confusion_matrix(y_true, y_pred, output_file=None, sample_weights=None):
@@ -278,9 +225,7 @@ def plot_confusion_matrix(y_true, y_pred, output_file=None, sample_weights=None)
         None
     """
     # Calculate confusion matrix with or without weights
-    using_weights = sample_weights is not None and not np.all(sample_weights == 1.0)
-
-    if using_weights:
+    if sample_weights is not None and not np.all(sample_weights == 1.0):
         cm = confusion_matrix(y_true, y_pred, sample_weight=sample_weights)
         title = "Weighted Confusion Matrix"
         fmt = ".1f"
@@ -289,60 +234,21 @@ def plot_confusion_matrix(y_true, y_pred, output_file=None, sample_weights=None)
         title = "Confusion Matrix"
         fmt = "d"
 
-    plt.figure(figsize=(10, 8))
-
-    # Calculate percentages for annotations
-    cm_sum = np.sum(cm)
-    cm_percentages = cm / cm_sum * 100
-
-    # Create annotation text with both count and percentage
-    annot = np.empty_like(cm, dtype=object)
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            if using_weights:
-                annot[i, j] = f"{cm[i, j]:.1f}\n({cm_percentages[i, j]:.1f}%)"
-            else:
-                annot[i, j] = f"{cm[i, j]}\n({cm_percentages[i, j]:.1f}%)"
-
-    # Plot heatmap
-    ax = sns.heatmap(
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
         cm,
-        annot=annot,
-        fmt="",
+        annot=True,
+        fmt=fmt,
         cmap="Blues",
         xticklabels=["Non-Cannabis", "Cannabis"],
         yticklabels=["Non-Cannabis", "Cannabis"],
-        cbar=True,
     )
-
-    # Calculate and display metrics
-    tn, fp, fn, tp = cm.ravel()
-    accuracy = (tp + tn) / (tp + tn + fp + fn)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1 = (
-        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    )
-
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title(
-        f"{title}\nAccuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}"
-    )
-
-    # Add text annotations for metrics
-    if using_weights:
-        plt.figtext(
-            0.5,
-            0.01,
-            "Note: Values shown are weighted counts and percentages",
-            ha="center",
-            fontsize=10,
-            bbox={"facecolor": "orange", "alpha": 0.2, "pad": 5},
-        )
+    plt.title(title)
 
     if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
+        plt.savefig(output_file)
         print(f"{title} saved to: {output_file}")
 
     plt.show()
@@ -361,17 +267,17 @@ def plot_precision_recall_curve(y_true, y_score, output_file=None, sample_weight
     Returns:
         None
     """
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(8, 6))
 
     # Standard precision-recall curve
-    precision, recall, thresholds = precision_recall_curve(y_true, y_score)
+    precision, recall, _ = precision_recall_curve(y_true, y_score)
     pr_auc = auc(recall, precision)
     plt.plot(recall, precision, marker=".", label=f"Standard (AUC = {pr_auc:.3f})")
 
     # Weighted precision-recall curve if weights are provided
     if sample_weights is not None and not np.all(sample_weights == 1.0):
         # Calculate weighted precision-recall curve
-        precision_w, recall_w, thresholds_w = precision_recall_curve(
+        precision_w, recall_w, _ = precision_recall_curve(
             y_true, y_score, sample_weight=sample_weights
         )
         pr_auc_w = auc(recall_w, precision_w)
@@ -382,48 +288,18 @@ def plot_precision_recall_curve(y_true, y_score, output_file=None, sample_weight
             linestyle="--",
             label=f"Weighted (AUC = {pr_auc_w:.3f})",
         )
-        title = "Precision-Recall Curve (Standard vs Weighted)"
-
-        # Add a baseline for random classifier
-        plt.plot(
-            [0, 1],
-            [sum(y_true * sample_weights) / sum(sample_weights)] * 2,
-            linestyle=":",
-            color="gray",
-            label="Weighted Baseline",
-        )
+        title = "Weighted Precision-Recall Curve"
     else:
         title = "Precision-Recall Curve"
-        plt.plot(
-            [0, 1],
-            [sum(y_true) / len(y_true)] * 2,
-            linestyle=":",
-            color="gray",
-            label="Baseline",
-        )
 
     plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.title(title)
-    plt.legend(loc="best")
+    plt.legend()
     plt.grid(True)
 
-    # Add annotations for key points
-    if sample_weights is not None and not np.all(sample_weights == 1.0):
-        plt.annotate(
-            f"Standard AUC: {pr_auc:.3f}", xy=(0.5, 0.3), xycoords="axes fraction"
-        )
-        plt.annotate(
-            f"Weighted AUC: {pr_auc_w:.3f}", xy=(0.5, 0.25), xycoords="axes fraction"
-        )
-        plt.annotate(
-            f"Difference: {pr_auc_w-pr_auc:+.3f}",
-            xy=(0.5, 0.2),
-            xycoords="axes fraction",
-        )
-
     if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
+        plt.savefig(output_file)
         print(f"{title} saved to: {output_file}")
 
     plt.show()
@@ -453,7 +329,7 @@ def train_model(
         min_samples_split: Minimum samples required to split a node
         random_state: Random seed for reproducibility
         use_class_weight: Whether to use class weighting
-        use_sample_weight: Whether to use sample weighting based on cluster_weight
+        use_sample_weight: Whether to use sample weighting based on clusterWeight
         n_splits: Number of folds for cross-validation
 
     Returns:
@@ -502,13 +378,13 @@ def train_model(
     print(f"\nPerforming {n_splits}-fold cross-validation...")
 
     # Check if sample weights are available
-    has_sample_weights = use_sample_weight and "cluster_weight" in df.columns
+    has_sample_weights = use_sample_weight and "clusterWeight" in df.columns
     if has_sample_weights:
         print(
             "Using cluster weights as sample weights for both training and evaluation"
         )
     elif use_sample_weight:
-        print("Warning: cluster_weight column not found, using uniform sample weights")
+        print("Warning: clusterWeight column not found, using uniform sample weights")
         has_sample_weights = False
     else:
         print("Sample weighting disabled")
@@ -521,8 +397,8 @@ def train_model(
 
         # Get sample weights for training
         if has_sample_weights:
-            train_weights = df.iloc[train_idx]["cluster_weight"].values
-            test_weights = df.iloc[test_idx]["cluster_weight"].values
+            train_weights = df.iloc[train_idx]["clusterWeight"].values
+            test_weights = df.iloc[test_idx]["clusterWeight"].values
         else:
             train_weights = np.ones(len(train_idx))
             test_weights = np.ones(len(test_idx))
@@ -569,7 +445,7 @@ def train_model(
     # Train the final model on the entire dataset
     print("\nTraining final model on entire dataset...")
     if has_sample_weights:
-        rf.fit(X_scaled, y, sample_weight=df["cluster_weight"].values)
+        rf.fit(X_scaled, y, sample_weight=df["clusterWeight"].values)
     else:
         rf.fit(X_scaled, y)
 
@@ -587,7 +463,7 @@ def train_model(
     if has_sample_weights:
         # Reorder the weights to match the order of cv_true_labels
         test_sample_weights = np.array(
-            [df.iloc[idx]["cluster_weight"] for idx in cv_test_indices]
+            [df.iloc[idx]["clusterWeight"] for idx in cv_test_indices]
         )
     else:
         test_sample_weights = np.ones(len(cv_true_labels))
@@ -618,14 +494,10 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     """
     print("\n=== Model Evaluation ===")
 
-    # Check if we're using sample weights
-    using_weights = sample_weights is not None and not np.all(sample_weights == 1.0)
+    using_weights = sample_weights is not None
 
     # Standard classification report
     print("\nStandard Classification Report:")
-    std_report = classification_report(
-        y_true, y_pred, target_names=["Non-Cannabis", "Cannabis"], output_dict=True
-    )
     print(
         classification_report(y_true, y_pred, target_names=["Non-Cannabis", "Cannabis"])
     )
@@ -633,13 +505,6 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     # Weighted classification report if using weights
     if using_weights:
         print("\nWeighted Classification Report:")
-        weighted_report = classification_report(
-            y_true,
-            y_pred,
-            target_names=["Non-Cannabis", "Cannabis"],
-            sample_weight=sample_weights,
-            output_dict=True,
-        )
         print(
             classification_report(
                 y_true,
@@ -648,8 +513,6 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
                 sample_weight=sample_weights,
             )
         )
-    else:
-        weighted_report = std_report
 
     # Standard confusion matrix
     print("\nStandard Confusion Matrix:")
@@ -695,25 +558,6 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     else:
         weighted_accuracy = accuracy
 
-    # Calculate standard and weighted metrics for each class
-    class_metrics = {}
-    for cls in ["0", "1"]:  # Non-Cannabis (0) and Cannabis (1)
-        class_metrics[cls] = {
-            "precision": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["precision"],
-            "recall": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["recall"],
-            "f1-score": std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["f1-score"],
-            "support": int(std_report["Non-Cannabis" if cls == "0" else "Cannabis"]["support"]),
-        }
-        if using_weights:
-            class_metrics[cls].update(
-                {
-                    "weighted_precision": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["precision"],
-                    "weighted_recall": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["recall"],
-                    "weighted_f1-score": weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["f1-score"],
-                    "weighted_support": float(weighted_report["Non-Cannabis" if cls == "0" else "Cannabis"]["support"]),
-                }
-            )
-
     # Return evaluation metrics
     metrics = {
         "accuracy": accuracy,
@@ -729,34 +573,7 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
             "false_negative": int(fn),
             "true_positive": int(tp),
         },
-        "class_metrics": class_metrics,
-        "using_weights": using_weights,
     }
-
-    # Print comparison of standard vs weighted metrics if weights are used
-    if using_weights:
-        print("\n=== Standard vs Weighted Metrics Comparison ===")
-        print(f"{'Metric':<20} {'Standard':<10} {'Weighted':<10} {'Difference':<10}")
-        print("-" * 50)
-        print(
-            f"{'Accuracy':<20} {accuracy:.4f}      {weighted_accuracy:.4f}      {weighted_accuracy-accuracy:+.4f}"
-        )
-        print(
-            f"{'ROC AUC':<20} {roc_auc:.4f}      {weighted_roc_auc:.4f}      {weighted_roc_auc-roc_auc:+.4f}"
-        )
-
-        # Class-specific metrics
-        for cls_name, cls in [("Non-Cannabis", "0"), ("Cannabis", "1")]:
-            print(f"\n{cls_name} Class:")
-            print(
-                f"{'Precision':<20} {class_metrics[cls]['precision']:.4f}      {class_metrics[cls]['weighted_precision']:.4f}      {class_metrics[cls]['weighted_precision']-class_metrics[cls]['precision']:+.4f}"
-            )
-            print(
-                f"{'Recall':<20} {class_metrics[cls]['recall']:.4f}      {class_metrics[cls]['weighted_recall']:.4f}      {class_metrics[cls]['weighted_recall']-class_metrics[cls]['recall']:+.4f}"
-            )
-            print(
-                f"{'F1-Score':<20} {class_metrics[cls]['f1-score']:.4f}      {class_metrics[cls]['weighted_f1-score']:.4f}      {class_metrics[cls]['weighted_f1-score']-class_metrics[cls]['f1-score']:+.4f}"
-            )
 
     return metrics
 
@@ -885,15 +702,6 @@ def main():
         sample_weights=sample_weights,
     )
 
-    # Plot standard confusion matrix for comparison if using weights
-    if args.use_sample_weight and "cluster_weight" in df.columns:
-        plot_confusion_matrix(
-            y_test,
-            y_pred,
-            output_file=os.path.join(args.plot_dir, "confusion_matrix_standard.png"),
-            sample_weights=None,
-        )
-
     # Plot precision-recall curve (weighted if sample weights are available)
     plot_precision_recall_curve(
         y_test,
@@ -910,44 +718,6 @@ def main():
     with open(args.output_metrics, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"Evaluation metrics saved to: {args.output_metrics}")
-
-    # Print summary of weighted vs unweighted metrics
-    if args.use_sample_weight and "cluster_weight" in df.columns:
-        print("\n=== Summary of Weighted Analysis ===")
-        print("The model was evaluated using both standard and weighted metrics.")
-        print(
-            "Weighted metrics account for the importance of each sample based on cluster weights."
-        )
-
-        # Calculate the difference between weighted and standard metrics
-        acc_diff = metrics["weighted_accuracy"] - metrics["accuracy"]
-        auc_diff = metrics["weighted_roc_auc"] - metrics["roc_auc"]
-
-        print(
-            f"\nAccuracy: Standard={metrics['accuracy']:.4f}, Weighted={metrics['weighted_accuracy']:.4f}, Diff={acc_diff:+.4f}"
-        )
-        print(
-            f"ROC AUC: Standard={metrics['roc_auc']:.4f}, Weighted={metrics['weighted_roc_auc']:.4f}, Diff={auc_diff:+.4f}"
-        )
-
-        if abs(acc_diff) > 0.05 or abs(auc_diff) > 0.05:
-            print(
-                "\nNOTE: There is a substantial difference between weighted and standard metrics."
-            )
-            print(
-                "This suggests that the model performs differently on samples with different weights."
-            )
-            if acc_diff > 0:
-                print("The model performs better on more heavily weighted samples.")
-            else:
-                print("The model performs worse on more heavily weighted samples.")
-        else:
-            print(
-                "\nThe difference between weighted and standard metrics is relatively small."
-            )
-            print(
-                "This suggests that the model performs consistently across samples with different weights."
-            )
 
 
 if __name__ == "__main__":
