@@ -26,7 +26,7 @@ def draw_histogram(collection_name, model_name):
     collection = db[collection_name]
 
     normalized_model_name = model_name.replace("/", "_")
-    field_name = f"classifier-score.{normalized_model_name }"
+    field_name = f"classifierScores.{normalized_model_name }"
 
     query = {field_name: {"$exists": True}}
     cursor = collection.find(query, {field_name: 1, "_id": 0})
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         "--model",
         type=str,
         required=True,
-        help="Model name (used in the field classifier-score.{model_name}).",
+        help="Model name (used in the field classifierScores.{model_name}).",
     )
     args = parser.parse_args()
     draw_histogram(args.collection, args.model)
