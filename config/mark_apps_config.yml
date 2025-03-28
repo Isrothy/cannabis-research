@@ -1,0 +1,2 @@
+collection: "googleApps"
+model_path: "models/cannabis_app_classifier.joblib"

@@ -1,11 +1,11 @@
 {
-  "accuracy": 0.9494400364879784,
-  "weighted_accuracy": 0.9494400364879785,
-  "precision": 0.9463155944951109,
-  "recall": 0.7876332350077114,
-  "f1_score": 0.8597135052066619,
-  "roc_auc": 0.9641365757799067,
-  "weighted_roc_auc": 0.8724997727794385,
+  "accuracy": 0.929849533590977,
+  "weighted_accuracy": 0.9298495335909771,
+  "precision": 0.8721140784266733,
+  "recall": 0.7539035111277553,
+  "f1_score": 0.8087118737872756,
+  "roc_auc": 0.9353967084254482,
+  "weighted_roc_auc": 0.8458156467934779,
   "confusion_matrix": {
     "true_negative": 12,
     "false_positive": 0,

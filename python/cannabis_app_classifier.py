@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import StratifiedKFold
+from pytorch_optimizer import SoftF1Loss
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -13,13 +14,18 @@ from sklearn.metrics import (
     auc,
 )
 from sklearn.preprocessing import StandardScaler
-import joblib
 import json
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
+
+from model_utils import (
+    AppDataset,
+    SimpleNN,
+    save_model,
+)
 
 
 def parse_args():
@@ -27,7 +33,6 @@ def parse_args():
         description="Train a model to identify cannabis-related apps.",
         config_file_parser_class=configargparse.YAMLConfigFileParser,
     )
-
     parser.add_argument(
         "--config", is_config_file=True, help="Path to YAML configuration file"
     )
@@ -56,12 +61,8 @@ def parse_args():
         help="Path to save the evaluation metrics",
     )
     parser.add_argument(
-        "--plot_dir",
-        type=str,
-        default="img",
-        help="Directory to save plots",
+        "--plot_dir", type=str, default="img", help="Directory to save plots"
     )
-    # Random Forest parameters (used if model_type == 'rf')
     parser.add_argument(
         "--n_estimators",
         type=int,
@@ -77,7 +78,6 @@ def parse_args():
     parser.add_argument(
         "--min_samples_leaf", type=int, default=5, help="Minimum samples in a leaf"
     )
-    # Common parameters
     parser.add_argument(
         "--random_state", type=int, default=42, help="Random seed for reproducibility"
     )
@@ -90,7 +90,7 @@ def parse_args():
         "--no_use_class_weight",
         dest="use_class_weight",
         action="store_false",
-        help="Use class weighting for imbalanced classes",
+        help="Disable class weighting",
     )
     parser.add_argument(
         "--use_sample_weight",
@@ -101,7 +101,7 @@ def parse_args():
         "--no_use_sample_weight",
         dest="use_sample_weight",
         action="store_false",
-        help="Disable sample weighting based on cluster weights",
+        help="Disable sample weighting",
     )
     parser.add_argument(
         "--feature_columns",
@@ -115,7 +115,6 @@ def parse_args():
         default=5,
         help="Number of folds for StratifiedKFold cross-validation",
     )
-    # New arguments for choosing model type and NN training
     parser.add_argument(
         "--model_type",
         type=str,
@@ -126,7 +125,7 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=25,
+        default=15,
         help="Number of epochs for neural network training (if using NN)",
     )
     parser.add_argument(
@@ -144,16 +143,11 @@ def parse_args():
     return parser.parse_args()
 
 
-# -----------------------------
-# Data Loading & Analysis
-# -----------------------------
 def load_data(apple_path, google_path):
     apple_df = pd.read_csv(apple_path)
     google_df = pd.read_csv(google_path)
-
     apple_df["source"] = "apple"
     google_df["source"] = "google"
-
     combined_df = pd.concat([apple_df, google_df], ignore_index=True)
     return combined_df
 
@@ -186,13 +180,9 @@ def analyze_data(df):
         )
 
 
-# -----------------------------
-# Plotting Functions
-# -----------------------------
 def plot_feature_importance(
     model, feature_names, output_file=None, sample_weights=None
 ):
-    # Only applicable for Random Forest
     importances = model.feature_importances_
     indices = np.argsort(importances)[::-1]
     plt.figure(figsize=(10, 6))
@@ -240,9 +230,9 @@ def plot_confusion_matrix(y_true, y_pred, output_file=None, sample_weights=None)
 
 
 def plot_precision_recall_curve(y_true, y_score, output_file=None, sample_weights=None):
-    plt.figure(figsize=(8, 6))
     precision, recall, _ = precision_recall_curve(y_true, y_score)
     pr_auc = auc(recall, precision)
+    plt.figure(figsize=(8, 6))
     plt.plot(recall, precision, marker=".", label=f"Standard (AUC = {pr_auc:.3f})")
     if sample_weights is not None and not np.all(sample_weights == 1.0):
         precision_w, recall_w, _ = precision_recall_curve(
@@ -270,52 +260,6 @@ def plot_precision_recall_curve(y_true, y_score, output_file=None, sample_weight
     plt.show()
 
 
-# -----------------------------
-# Dataset and Model Definitions
-# -----------------------------
-class AppDataset(Dataset):
-    def __init__(self, X, y, weights=None):
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32).view(-1, 1)
-        self.weights = (
-            torch.tensor(weights, dtype=torch.float32).view(-1, 1)
-            if weights is not None
-            else torch.ones_like(self.y)
-        )
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx], self.weights[idx]
-
-
-class SimpleNN(nn.Module):
-    def __init__(self, input_dim):
-        super(SimpleNN, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 128),
-            nn.BatchNorm1d(128),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 128),
-            nn.BatchNorm1d(128),
-            nn.LeakyReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 1),
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-
-# -----------------------------
-# Helper Functions for Training
-# -----------------------------
 def train_epoch(model, loader, optimizer, loss_fn, device):
     model.train()
     losses = []
@@ -330,46 +274,38 @@ def train_epoch(model, loader, optimizer, loss_fn, device):
     return np.mean(losses)
 
 
-def validate_model(model, loader, loss_fn, device):
+def validate(loader, model, device):
     model.eval()
-    losses, all_preds, all_true = [], [], []
+    all_preds, all_probs = [], []
     with torch.no_grad():
-        for X, y, weights in loader:
-            X, y, weights = X.to(device), y.to(device), weights.to(device)
-            logits = model(X)
-            loss = (loss_fn(logits, y) * weights).mean()
-            losses.append(loss.item())
+        for X_batch, _, _ in loader:
+            X_batch = X_batch.to(device)
+            logits = model(X_batch)
             probs = torch.sigmoid(logits).cpu().numpy().ravel()
             preds = (probs >= 0.5).astype(int)
             all_preds.extend(preds)
-            all_true.extend(y.cpu().numpy().ravel())
-    return np.mean(losses), all_preds, all_true
+            all_probs.extend(probs)
+    return all_preds, all_probs
 
 
-def train_model_with_early_stopping(
-    model, train_loader, val_loader, optimizer, loss_fn, device, epochs, patience
-):
-    best_val_loss = np.inf
-    epochs_no_improve = 0
-    best_state = None
+def train_model(model, loader, optimizer, loss_fn, device, epochs):
+    model.train()
     for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, optimizer, loss_fn, device)
-        val_loss, _, _ = validate_model(model, val_loader, loss_fn, device)
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_state = model.state_dict()
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
-        if epochs_no_improve >= patience:
-            break
-    model.load_state_dict(best_state)
+        losses = []
+        for X, y, weights in loader:
+            X, y, weights = X.to(device), y.to(device), weights.to(device)
+            optimizer.zero_grad()
+            logits = model(X)
+            loss = loss_fn(logits, y)
+            loss = (loss * weights).mean()
+            loss.backward()
+            optimizer.step()
+            losses.append(loss.item())
+        avg_loss = np.mean(losses)
+        print(f"Epoch {epoch+1}/{epochs} - Train Loss: {avg_loss:.4f}")
     return model
 
 
-# -----------------------------
-# PyTorch Neural Network Training (Simplified with L2 Regularization)
-# -----------------------------
 def train_nn_model(
     df,
     feature_cols,
@@ -380,9 +316,8 @@ def train_nn_model(
     batch_size=32,
     learning_rate=0.001,
     patience=5,
-    l2_reg=0.001,  # L2 regularization parameter (weight_decay)
+    l2_reg=0.001,
 ):
-    # Prepare data
     X = df[feature_cols].values
     y = df["cannabis_related"].values
     scaler = StandardScaler()
@@ -397,6 +332,7 @@ def train_nn_model(
     )
     print(f"device = {device}")
     loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+    # loss_fn = SoftF1Loss()
 
     for fold, (train_idx, test_idx) in enumerate(skf.split(X_scaled, y)):
         X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
@@ -417,26 +353,9 @@ def train_nn_model(
         optimizer = optim.Adam(
             model.parameters(), lr=learning_rate, weight_decay=l2_reg
         )
-        model = train_model_with_early_stopping(
-            model,
-            train_loader,
-            test_loader,
-            optimizer,
-            loss_fn,
-            device,
-            epochs,
-            patience,
-        )
+        model = train_model(model, train_loader, optimizer, loss_fn, device, epochs)
 
-        # Evaluate fold
-        _, preds, _ = validate_model(model, test_loader, loss_fn, device)
-        probs = []
-        model.eval()
-        with torch.no_grad():
-            for X_batch, _, _ in test_loader:
-                X_batch = X_batch.to(device)
-                batch_probs = torch.sigmoid(model(X_batch)).cpu().numpy().ravel()
-                probs.extend(batch_probs)
+        preds, probs = validate(test_loader, model, device)
         cv_predictions.extend(preds)
         cv_probabilities.extend(probs)
         cv_true_labels.extend(y_test)
@@ -464,18 +383,10 @@ def train_nn_model(
     optimizer = optim.Adam(
         final_model.parameters(), lr=learning_rate, weight_decay=l2_reg
     )
-    final_model = train_model_with_early_stopping(
-        final_model,
-        train_loader,
-        val_loader,
-        optimizer,
-        loss_fn,
-        device,
-        epochs,
-        patience,
+    final_model = train_model(
+        final_model, val_loader, optimizer, loss_fn, device, epochs
     )
 
-    # Define prediction functions for the final model
     def predict_fn(X_input):
         final_model.eval()
         with torch.no_grad():
@@ -498,7 +409,6 @@ def train_nn_model(
         "predict_proba": predict_proba_fn,
     }
 
-    # Return actual sample weights if available, otherwise uniform weights.
     if use_sample_weight and "clusterWeight" in df.columns:
         test_sample_weights = np.array(
             [df.iloc[idx]["clusterWeight"] for idx in cv_test_indices]
@@ -516,9 +426,6 @@ def train_nn_model(
     )
 
 
-# -----------------------------
-# Random Forest Training (unchanged)
-# -----------------------------
 def train_rf_model(
     df,
     feature_cols,
@@ -552,7 +459,7 @@ def train_rf_model(
         min_samples_leaf=min_samples_leaf,
         random_state=random_state,
         n_jobs=-1,
-        verbose=1,
+        verbose=0,
     )
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
     cv_scores = []
@@ -560,7 +467,6 @@ def train_rf_model(
     cv_probabilities = []
     cv_true_labels = []
     cv_test_indices = []
-
     print(f"\nPerforming {n_splits}-fold cross-validation for RF...")
     has_sample_weights = use_sample_weight and "clusterWeight" in df.columns
     if has_sample_weights:
@@ -573,8 +479,6 @@ def train_rf_model(
     else:
         print("Sample weighting disabled")
         has_sample_weights = False
-    # print(f"use_sample_weights: {use_sample_weight}")
-    # print(f"has_sample_weights: {has_sample_weights}")
 
     for fold, (train_idx, test_idx) in enumerate(skf.split(X_scaled, y)):
         X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
@@ -635,9 +539,6 @@ def train_rf_model(
     )
 
 
-# -----------------------------
-# Evaluation, Saving, and Prediction
-# -----------------------------
 def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     print("\n=== Model Evaluation ===")
     using_weights = sample_weights is not None and not np.all(sample_weights == 1.0)
@@ -704,95 +605,6 @@ def evaluate_model(y_true, y_pred, y_proba, sample_weights=None):
     return metrics
 
 
-def save_model(model, output_path):
-    """
-    Save the trained model.
-    For neural networks, the PyTorch model is saved along with metadata.
-    For Random Forest, the model is saved via joblib.
-    """
-    if isinstance(model["model"], torch.nn.Module):
-        if os.path.exists(output_path) and os.path.isfile(output_path):
-            os.remove(output_path)
-        os.makedirs(output_path, exist_ok=True)
-        torch.save(
-            model["model"].state_dict(), os.path.join(output_path, "pytorch_model.pt")
-        )
-        meta_data = {"scaler": model["scaler"], "feature_cols": model["feature_cols"]}
-        joblib.dump(meta_data, os.path.join(output_path, "model_meta.joblib"))
-        print(f"Neural network model saved to directory: {output_path}")
-    else:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        model_data = {
-            "model": model["model"],
-            "scaler": model["scaler"],
-            "feature_cols": model["feature_cols"],
-        }
-        joblib.dump(model_data, output_path)
-        print(f"Model saved to: {output_path}")
-
-
-def load_saved_model(model_path):
-    """
-    Load a saved model.
-    """
-    if os.path.exists(os.path.join(model_path, "pytorch_model.pt")):
-        meta_data = joblib.load(os.path.join(model_path, "model_meta.joblib"))
-        input_dim = len(meta_data["feature_cols"])
-        model_nn = SimpleNN(input_dim=input_dim)
-        model_nn.load_state_dict(
-            torch.load(
-                os.path.join(model_path, "pytorch_model.pt"),
-                map_location=torch.device("cpu"),
-            )
-        )
-        loaded_model = {
-            "model": model_nn,
-            "scaler": meta_data["scaler"],
-            "feature_cols": meta_data["feature_cols"],
-            "predict": lambda X: (
-                torch.sigmoid(model_nn(torch.tensor(X, dtype=torch.float32)))
-                .detach()
-                .numpy()
-                .ravel()
-                >= 0.5
-            ).astype(int),
-            "predict_proba": lambda X: torch.sigmoid(
-                model_nn(torch.tensor(X, dtype=torch.float32))
-            )
-            .detach()
-            .numpy()
-            .ravel(),
-        }
-        return loaded_model
-    else:
-        model_data = joblib.load(model_path)
-        loaded_model = {
-            "model": model_data["model"],
-            "scaler": model_data["scaler"],
-            "feature_cols": model_data["feature_cols"],
-            "predict": lambda X: model_data["model"].predict(X),
-            "predict_proba": lambda X: model_data["model"].predict_proba(X)[:, 1],
-        }
-        return loaded_model
-
-
-def predict_cannabis_app(model, app_data):
-    """
-    Predict whether an app is cannabis-related.
-    """
-    if isinstance(app_data, dict):
-        features = np.array([[app_data.get(col, 0) for col in model["feature_cols"]]])
-    else:
-        features = app_data[model["feature_cols"]].values
-    scaled_features = model["scaler"].transform(features)
-    prediction = model["predict"](scaled_features)
-    probability = model["predict_proba"](scaled_features)
-    return prediction, probability
-
-
-# -----------------------------
-# Main Function
-# -----------------------------
 def main():
     args = parse_args()
     os.makedirs(args.plot_dir, exist_ok=True)
@@ -845,7 +657,6 @@ def main():
 
     metrics = evaluate_model(y_test, y_pred, y_proba, sample_weights)
 
-    # Plot confusion matrix
     plot_confusion_matrix(
         y_test,
         y_pred,
@@ -853,7 +664,6 @@ def main():
         sample_weights=sample_weights,
     )
 
-    # Plot precision-recall curve
     plot_precision_recall_curve(
         y_test,
         y_proba,
